@@ -1,0 +1,12 @@
+#pragma once
+
+#include "NativeGameplayTags.h"
+
+namespace HWGameplayTags
+{
+	/** Input Tags **/
+	UNREALHW07_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Move);
+	UNREALHW07_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Look);
+	UNREALHW07_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Elevate);
+	UNREALHW07_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Roll);
+}

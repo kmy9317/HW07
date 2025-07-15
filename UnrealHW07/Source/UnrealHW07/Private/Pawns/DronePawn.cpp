@@ -46,8 +46,6 @@ ADronePawn::ADronePawn()
 void ADronePawn::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
-	GEngine->AddOnScreenDebugMessage(-1, 0.f, FColor::Cyan, FString::Printf(TEXT("CurrentZVelocity: %f"), CurrentZVelocity));
 	
 	UpdateMoveState();
 
@@ -59,10 +57,6 @@ void ADronePawn::Tick(float DeltaTime)
 	if (MoveState == EDroneMoveState::Flying)
 	{
 		ApplyGravity(DeltaTime);
-	}
-	else if (MoveState == EDroneMoveState::Grounded)
-	{
-		CurrentZVelocity = 0.f;
 	}
 }
 
@@ -97,6 +91,7 @@ void ADronePawn::Input_Move(const FInputActionValue& InputActionValue)
 
 	const float DeltaTime = GetWorld()->GetDeltaSeconds();
 
+	// TODO: 밑의 코드 중복부분 Refactoring 
 	if (MoveState == EDroneMoveState::Grounded)
 	{
 		const FVector LocalOffset(InputValue.Y * MoveSpeed * DeltaTime,InputValue.X * MoveSpeed * DeltaTime,0.f); 
@@ -114,7 +109,7 @@ void ADronePawn::Input_Look(const FInputActionValue& InputActionValue)
 	const FVector2D InputValue = InputActionValue.Get<FVector2D>();
 	if (InputValue.IsNearlyZero()) return;
 
-	const float YawDelta   =  InputValue.X * LookSensitivity;       
+	const float YawDelta = InputValue.X * LookSensitivity;       
 	const float PitchDelta = -InputValue.Y * LookSensitivity;   
 
 	if (MoveState == EDroneMoveState::Grounded)
@@ -129,27 +124,25 @@ void ADronePawn::Input_Look(const FInputActionValue& InputActionValue)
 	}
 	else if (MoveState == EDroneMoveState::Flying)
 	{
-		FRotator CurrentRotation = GetActorRotation();
+		const FRotator CurrentRotation = GetActorRotation();
 
-		float NewYaw   = CurrentRotation.Yaw   + YawDelta;
+		float NewYaw   = CurrentRotation.Yaw + YawDelta;
 		float NewPitch = CurrentRotation.Pitch + PitchDelta;
 
 		NewPitch = FMath::Clamp(NewPitch, FlyingPitchRange.Min, FlyingPitchRange.Max);
 
 		SetActorRotation(FRotator(NewPitch, NewYaw, CurrentRotation.Roll));
-
-		if (!bShouldInterpCamera)
-		{
-			CameraPitch = 0.f;
-			CameraRoll  = 0.f;
-			CameraBoom->SetRelativeRotation(FRotator(CameraPitch, 0.f, CameraRoll));
-		}
 	}
 }
 
 void ADronePawn::Input_ElevateStarted(const FInputActionValue& InputActionValue)
 {
 	bIsElevating = true;
+
+	if (CurrentZVelocity < 0.f && InputActionValue.Get<float>() > 0.f)
+	{
+		CurrentZVelocity = FMath::Max(CurrentZVelocity, -50.f);
+	}
 }
 
 void ADronePawn::Input_Elevate(const FInputActionValue& InputActionValue)
@@ -161,24 +154,10 @@ void ADronePawn::Input_Elevate(const FInputActionValue& InputActionValue)
 	}
 	
 	const float DeltaTime = GetWorld()->GetDeltaSeconds();
-
-	if (MoveState == EDroneMoveState::Grounded)
-	{
-		MoveState = EDroneMoveState::Flying;
-		TargetCameraPitch = 0.f;
-		bShouldInterpCamera = true;
-	}
-	if (MoveState == EDroneMoveState::Flying)
-	{
-		if (CurrentZVelocity < 0.f && InputValue > 0.f)
-		{
-			CurrentZVelocity = FMath::Max(CurrentZVelocity, -50.f);
-		}
-		
-		const float Accel = InputValue * ThrustAccelZ * DeltaTime;
-		CurrentZVelocity += Accel;
-		CurrentZVelocity = FMath::Clamp(CurrentZVelocity, MaxFallingSpeed, MaxAscendingSpeed);
-	}
+	
+	const float Accel = InputValue * ThrustAccelZ * DeltaTime;
+	CurrentZVelocity += Accel;
+	CurrentZVelocity = FMath::Clamp(CurrentZVelocity, MaxFallingSpeed, MaxAscendingSpeed);
 }
 
 void ADronePawn::Input_ElevateReleased(const FInputActionValue& InputActionValue)
@@ -215,26 +194,24 @@ void ADronePawn::UpdateMoveState()
 
 	if (bOnLanded && MoveState != EDroneMoveState::Grounded && !bIsElevating)
 	{
-		MoveState = EDroneMoveState::Grounded;
-		CurrentZVelocity = 0.f;
 		OnLanded();
 	}
 
-	else if (!bOnLanded && MoveState == EDroneMoveState::Grounded )
+	else if (((!bOnLanded) || bIsElevating) && MoveState == EDroneMoveState::Grounded )
 	{
-		MoveState = EDroneMoveState::Flying;
-		bShouldInterpCamera = true;
+		OnFlying();
 	}
 }
 
 void ADronePawn::ApplyGravity(float DeltaTime)
 {
+	// 뉴턴의 운동 법칙 참고
 	CurrentZVelocity += GravityZ * DeltaTime;
 	CurrentZVelocity = FMath::Max(CurrentZVelocity, MaxFallingSpeed);        
 
-	const FVector Offset(0.f, 0.f, CurrentZVelocity * DeltaTime);
+	const FVector ZOffset(0.f, 0.f, CurrentZVelocity * DeltaTime);
 
-	AddActorWorldOffset(Offset, true);
+	AddActorWorldOffset(ZOffset, true);
 }
 
 void ADronePawn::InterpCamera(float DeltaTime)
@@ -256,11 +233,15 @@ void ADronePawn::InterpCamera(float DeltaTime)
 
 void ADronePawn::OnLanded()
 {
+	MoveState = EDroneMoveState::Grounded;
+	CurrentZVelocity = 0.f;
+	
 	const FRotator CurrentPawnRotation = GetActorRotation();
 
 	const FRotator CurrentCameraRelativeRotation = CameraBoom->GetRelativeRotation();
 	const FRotator WorldCameraRotation = UKismetMathLibrary::ComposeRotators(CurrentPawnRotation, CurrentCameraRelativeRotation);
 
+	// 드론의 방향 유지
 	const FRotator NewRotation(0.f, CurrentPawnRotation.Yaw, 0.f);
 	SetActorRotation(NewRotation);
 
@@ -272,7 +253,14 @@ void ADronePawn::OnLanded()
 	TargetCameraRoll = 0.f;
 	bShouldInterpCamera = true;
 
+	// 드론의 회전이 변경될 때 카메라도 같이 바로 변경되는 것을 막기 위해 이전에 위치한 값들로 상대 좌표로 세팅
 	CameraBoom->SetRelativeRotation(FRotator(CameraPitch, 0.f, CameraRoll));
+}
+
+void ADronePawn::OnFlying()
+{
+	MoveState = EDroneMoveState::Flying;
+	bShouldInterpCamera = true;
 }
 
 

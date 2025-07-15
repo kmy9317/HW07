@@ -45,6 +45,7 @@ private:
 	void ApplyGravity(float DeltaTime);
 	void InterpCamera(float DeltaTime);
 	void OnLanded();
+	void OnFlying();
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Components")
@@ -90,7 +91,8 @@ protected:
 	float ThrustAccelZ = 1000.f;
 	
 	float CurrentZVelocity = 0.f;           
-	
+
+	// 현재 카메라의 Pitch, Roll
 	float CameraPitch = 0.f;
 	float CameraRoll = 0.f;
 

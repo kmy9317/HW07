@@ -6,6 +6,8 @@
 #include "GameFramework/Pawn.h"
 #include "DronePawn.generated.h"
 
+class UDroneCameraComponent;
+class UDroneMovementComponent;
 struct FInputActionValue;
 class UDataAsset_InputConfig;
 class UCameraComponent;
@@ -28,10 +30,9 @@ public:
 	// Sets default values for this pawn's properties
 	ADronePawn();
 
-	virtual void Tick(float DeltaTime) override;
-	
 protected:
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+	virtual void BeginPlay() override;
 
 	void Input_Move(const FInputActionValue& InputActionValue);
 	void Input_Look(const FInputActionValue& InputActionValue);
@@ -41,11 +42,11 @@ protected:
 	void Input_Roll(const FInputActionValue& InputActionValue);
 
 private:
-	void UpdateMoveState();
-	void ApplyGravity(float DeltaTime);
-	void InterpCamera(float DeltaTime);
-	void OnLanded();
-	void OnFlying();
+	UFUNCTION()
+	void HandleLanded();
+
+	UFUNCTION()
+	void HandleFlying();
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Components")
@@ -60,11 +61,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Components")
 	UCameraComponent* FollowCamera;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Components")
+	UDroneMovementComponent* DroneMovement;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Components")
+	UDroneCameraComponent* DroneCameraInterp;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "PawnData")
 	UDataAsset_InputConfig* InputConfigDataAsset;
-
-	UPROPERTY(EditAnywhere, Category = "Movement")
-	float MoveSpeed = 800.f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float LookSensitivity = 1.f;
@@ -72,42 +76,24 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Movement|Flight")
 	float RollSpeed = 60.f;
 
+	// Camera Constants
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float DefaultCameraArmLength = 300.f;
+
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	FFloatInterval GroundCameraPitchRange = FFloatInterval(-80.f, 80.f);
+
+	// Movement Constants
+	UPROPERTY(EditAnywhere, Category = "Movement")
+	float FlyingSpeedMultiplier = 0.5f;
+
+	UPROPERTY(EditAnywhere, Category = "Movement|Ground")
+	float GroundDetectionOffset = 10.f;
+
 	UPROPERTY(EditAnywhere, Category="Movement|Flight", meta = (ClampMin = "-85", ClampMax = "95"))
 	FFloatInterval FlyingPitchRange = FFloatInterval(-80.f, 80.f);
 
 	UPROPERTY(EditAnywhere, Category="Movement|Flight", meta = (ClampMin = "-45", ClampMax = "45"))
 	FFloatInterval FlyingRollRange = FFloatInterval(-30, 30.f);
 
-	UPROPERTY(EditAnywhere, Category="Movement|Gravity", meta=(ClampMax="0"))
-	float GravityZ = -980.f;              
-
-	UPROPERTY(EditAnywhere, Category="Movement|Gravity")
-	float MaxFallingSpeed = -1000.f;
-
-	UPROPERTY(EditAnywhere, Category="Movement|Gravity")
-	float MaxAscendingSpeed = 400.f;
-
-	UPROPERTY(EditAnywhere, Category="Movement|Gravity")
-	float ThrustAccelZ = 1000.f;
-	
-	float CurrentZVelocity = 0.f;           
-
-	// 현재 카메라의 Pitch, Roll
-	float CameraPitch = 0.f;
-	float CameraRoll = 0.f;
-
-	float TargetCameraPitch = 0.f;
-	float TargetCameraRoll = 0.f;
-
-	UPROPERTY(EditAnywhere, Category = "Movement|Flight")
-	float CameraPitchInterpSpeed = 3.f;
-
-	UPROPERTY(EditAnywhere, Category = "Movement|Flight")
-	float CameraRollInterpSpeed = 5.f;
-
-	bool bShouldInterpCamera = false;
-
-	bool bIsElevating = false;
-	
-	EDroneMoveState MoveState = EDroneMoveState::Grounded;
 };
